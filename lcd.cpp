@@ -106,7 +106,7 @@ int main() {
     /*
      * Remove comment to test with vertex number input
      */
-    test_lcd_graph_gen();
+//    test_lcd_graph_gen();
 
     return 0;
 }
