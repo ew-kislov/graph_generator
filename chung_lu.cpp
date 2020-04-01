@@ -8,7 +8,14 @@ using namespace std;
 
 enum Connectivity_Degree { One_Component = 0, Big_Component, Many_Small_Components };
 
-void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t *&src_ids, graph_t *&dest_ids) {
+void chung_lu_graph_gen(
+        double alpha,
+        double beta,
+        bool is_oriented,
+        graph_t &edge_number,
+        graph_t *&src_ids,
+        graph_t *&dest_ids
+) {
     graph_t max_degree = round(exp(alpha / beta));
     graph_t *degree_array = new graph_t[max_degree + 1];
     graph_t vertex_number = 0;
@@ -20,7 +27,10 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
      * Counting vertex/edge number
      */
 
-    for (graph_t degree = 1; degree <= max_degree; degree++) {
+    graph_t degree;
+
+    #pragma parallel omp for  num_threads(8) schedule(dynamic, 256) private(degree) shared(degree_array, max_degree, vertex_number, edge_number)
+    for (degree = 1; degree <= max_degree; degree++) {
         degree_array[degree] = round(exp(alpha) / pow(degree, beta));
 
         vertex_number += degree_array[degree];
@@ -37,9 +47,13 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
      * Initializing vertex_array - array which contains each vertex with number of degree
      */
 
-    for (graph_t degree = 1; degree <= max_degree; degree++) {
-        for (graph_t local_vertex_index = 1; local_vertex_index <= degree_array[degree]; local_vertex_index++) {
-            for (graph_t vertex_edge = 1; vertex_edge <= degree; vertex_edge++) {
+    graph_t local_vertex_index;
+    graph_t vertex_edge;
+
+    #pragma parallel omp for  num_threads(8) schedule(dynamic, 256) private(degree) shared(vertex_array, degree_array, max_degree, vertex_array_index)
+    for (degree = 1; degree <= max_degree; degree++) {
+        for (local_vertex_index = 1; local_vertex_index <= degree_array[degree]; local_vertex_index++) {
+            for (vertex_edge = 1; vertex_edge <= degree; vertex_edge++) {
                 vertex_array[vertex_array_index] = vertex_index;
                 vertex_array_index++;
             }
@@ -47,8 +61,13 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
         }
     }
 
-    src_ids = new graph_t[edge_number];
-    dest_ids = new graph_t[edge_number];
+    if (is_oriented) {
+        src_ids = new graph_t[edge_number];
+        dest_ids = new graph_t[edge_number];
+    } else {
+        src_ids = new graph_t[2 * edge_number];
+        dest_ids = new graph_t[2 * edge_number];
+    }
 
     /*
      * Randomly generating edges
@@ -58,7 +77,7 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
     graph_t vertex1;
     graph_t vertex2;
 
-    #pragma omp parallel num_threads(8) private(edge_iterator) shared(vertex1, vertex2, vertex_array, src_ids, dest_ids, edge_number)
+    #pragma omp parallel num_threads(8) private(edge_iterator) shared(vertex1, vertex2, vertex_array, src_ids, dest_ids, edge_number, is_oriented)
     {
         graph_t seed = int(time(NULL)) * omp_get_thread_num();
         srand(seed);
@@ -79,12 +98,17 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
                 }
             } else {
                 while (vertex_array[vertex1] == vertex_array[vertex2]) {
-                    vertex1 = rand() % edge_iterator * 2 + 1;
-                    vertex2 = rand() % edge_iterator * 2 + 1;
+                    vertex1 = rand() % edge_iterator + 1;
+                    vertex2 = rand() % edge_iterator + edge_iterator + 1;
                 }
 
                 src_ids[edge_number - edge_iterator] = vertex_array[vertex1];
                 dest_ids[edge_number - edge_iterator] = vertex_array[vertex2];
+
+                if (!is_oriented) {
+                    src_ids[2 * edge_number - edge_iterator - 1] = vertex_array[vertex2];
+                    dest_ids[2 * edge_number - edge_iterator - 1] = vertex_array[vertex1];
+                }
 
                 /*
                  * Replacing chosen vertexes with two last vertexes
@@ -95,12 +119,17 @@ void chung_lu_graph_gen(double alpha, double beta, graph_t &edge_number, graph_t
             }
         }
     }
+
+    if (!is_oriented) {
+        edge_number *= 2;
+    }
 }
 
 
 void chung_lu_graph_gen(
         graph_t  desired_vertex_number,
         Connectivity_Degree connectivity_degree,
+        bool is_oriented,
         graph_t  &edge_number,
         graph_t *&src_ids,
         graph_t *&dest_ids
@@ -165,7 +194,7 @@ void chung_lu_graph_gen(
      * Running Chung-Lu generator for found alpha/beta parameters
      */
 
-    chung_lu_graph_gen(alpha, beta, edge_number, src_ids, dest_ids);
+    chung_lu_graph_gen(alpha, beta, is_oriented, edge_number, src_ids, dest_ids);
 }
 
 void print_graph_edges(
@@ -181,6 +210,7 @@ void print_graph_edges(
 
 void test_with_alpha_beta_input() {
     double alpha, beta;
+    bool is_oriented;
 
     graph_t edge_number;
     graph_t *src_ids;
@@ -191,9 +221,9 @@ void test_with_alpha_beta_input() {
     cout << "beta: ";
     cin >> beta;
 
-    chung_lu_graph_gen(alpha, beta, edge_number, src_ids, dest_ids);
+    chung_lu_graph_gen(alpha, beta, is_oriented, edge_number, src_ids, dest_ids);
 
-    print_graph_edges(edge_number, src_ids, dest_ids);
+//    print_graph_edges(edge_number, src_ids, dest_ids);
 
     delete[] src_ids;
     delete[] dest_ids;
@@ -202,6 +232,7 @@ void test_with_alpha_beta_input() {
 void test_with_vertex_number_input() {
     int connectivity_degree_ord;
     Connectivity_Degree connectivity_degree;
+    bool is_oriented;
     graph_t vertex_number;
     graph_t edge_number;
     graph_t *src_ids;
@@ -211,12 +242,14 @@ void test_with_vertex_number_input() {
     cin >> vertex_number;
     cout << "Connectivity degree(one component - 0, big component - 1, many small-components - 2): ";
     cin >> connectivity_degree_ord;
+    cout << "Is graph oriented(0 - false, 1 - true): ";
+    cin >> is_oriented;
 
     connectivity_degree = static_cast<Connectivity_Degree>(connectivity_degree_ord);
 
-    chung_lu_graph_gen(vertex_number, connectivity_degree, edge_number, src_ids, dest_ids);
+    chung_lu_graph_gen(vertex_number, connectivity_degree, is_oriented, edge_number, src_ids, dest_ids);
 
-    print_graph_edges(edge_number, src_ids, dest_ids);
+//    print_graph_edges(edge_number, src_ids, dest_ids);
 
     delete[] src_ids;
     delete[] dest_ids;

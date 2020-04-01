@@ -5,7 +5,13 @@ using namespace std;
 
 #define graph_t unsigned long long int
 
-void lcd_graph_gen(graph_t vertex_number, graph_t &edge_number, graph_t *&src_ids, graph_t *&dest_ids) {
+void lcd_graph_gen(
+        graph_t vertex_number,
+        bool is_oriented,
+        graph_t &edge_number,
+        graph_t *&src_ids,
+        graph_t *&dest_ids
+) {
     graph_t *chord_array = new graph_t[2 * vertex_number + 1];
 
     graph_t free_vertices_number = 2 * vertex_number;
@@ -57,7 +63,7 @@ void lcd_graph_gen(graph_t vertex_number, graph_t &edge_number, graph_t *&src_id
 
     edge_number = 0;
     for (graph_t i = 1; i <= 2 * vertex_number; i++) {
-        if (vertex_mapping[i] != vertex_mapping[chord_array[i]] && i > chord_array[i]) {
+        if (vertex_mapping[i] != vertex_mapping[chord_array[i]] && (i < chord_array[i] || !is_oriented)) {
             edge_number++;
         }
     }
@@ -72,7 +78,7 @@ void lcd_graph_gen(graph_t vertex_number, graph_t &edge_number, graph_t *&src_id
     graph_t edge_counter = 0;
 
     for (graph_t i = 1; i <= 2 * vertex_number; i++) {
-        if (vertex_mapping[i] != vertex_mapping[chord_array[i]] && i < chord_array[i]) {
+        if (vertex_mapping[i] != vertex_mapping[chord_array[i]] && (i < chord_array[i] || !is_oriented)) {
             src_ids[edge_counter] = vertex_mapping[i];
             dest_ids[edge_counter] = vertex_mapping[chord_array[i]];
             edge_counter++;
@@ -88,15 +94,20 @@ void print_graph_edges(graph_t edge_number, graph_t *src_ids, graph_t *dest_ids)
 
 void test_lcd_graph_gen() {
     graph_t vertex_number;
+    bool is_oriented;
+
     cout << "Vertex number: ";
     cin >> vertex_number;
+    cout << "Is graph oriented(0 - false, 1 - true): ";
+    cin >> is_oriented;
 
     graph_t edge_number;
     graph_t *src_ids;
     graph_t *dest_ids;
 
-    lcd_graph_gen(vertex_number, edge_number, src_ids, dest_ids);
-    print_graph_edges(edge_number, src_ids, dest_ids);
+    lcd_graph_gen(vertex_number, is_oriented, edge_number, src_ids, dest_ids);
+
+//    print_graph_edges(edge_number, src_ids, dest_ids);
 
     delete[] src_ids;
     delete[] dest_ids;
@@ -106,7 +117,7 @@ int main() {
     /*
      * Remove comment to test with vertex number input
      */
-//    test_lcd_graph_gen();
+    test_lcd_graph_gen();
 
     return 0;
 }
